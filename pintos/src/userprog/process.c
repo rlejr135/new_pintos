@@ -34,15 +34,30 @@ process_execute (const char *file_name)
 
  /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-//	printf("[%s]\n", file_name);
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
 
   strlcpy (fn_copy, file_name, PGSIZE);
+ 
+  ///added
+  char cpyname[20];
+  int i = 0;
+  while(1){
+	  if (file_name[i] == ' ' || file_name[i] == '\0' || file_name[i] == '\t'){
+		  cpyname[i] = 0;
+		  break;
+	  }
+	  cpyname[i] = file_name[i];
+	  i++;
+  }
+  
+  if (filesys_open(cpyname) == NULL){
+	  return -1;
+  }
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-//  printf("hello %d\n\n", tid);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
 
@@ -63,13 +78,12 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
 
+  success = load (file_name, &if_.eip, &if_.esp);
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
-
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -97,20 +111,18 @@ process_wait (tid_t child_tid)
   int exit_status;
 
 
-//	printf("parent : [%d] parent status : [%d] \n\n child : [%d], status []\n\n", cur->tid, cur->status, child_tid);
   for(e = list_begin(&(cur->child)); e != list_end(&(cur->child)); e = list_next(e)){
       t = list_entry(e, struct thread, child_elem);
 
       if(child_tid == t->tid){
-		  // t is child
 		
-		  while(cur->rego == 0){
+		  while(cur->waiting){
 			 barrier(); 
 		  }
 		  exit_status = cur->exit_status;
 		  cur->exit_status = 0;
           list_remove(&(cur->dest_elem));
-			cur->rego =0;
+			cur->waiting = true;
           return exit_status;
       }
   }
@@ -144,8 +156,7 @@ process_exit (void)
   tmp = cur->parent;
   tmp->exit_status = cur->exit_status;
   tmp->dest_elem = cur->child_elem;
-  tmp->rego = 1;
-//	printf("parent : [%d] parent status: [%d] cur parent : [%d]\n\n", tmp->tid, tmp->status, cur->tid);
+  tmp->waiting = false;
 }
 
 /* Sets up the CPU for running user code in the current
@@ -260,7 +271,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   for(arg[j++] = strtok_r(file_name, seps, &save_ptr); arg[j - 1] != NULL; arg[j++] = strtok_r(NULL, seps, &save_ptr)) ;
 
   /* Open executable file. */
-
   file = filesys_open (arg[0]);
   if (file == NULL) 
     {

@@ -15,7 +15,6 @@ void _valid_addr(const void *vaddr){
     if (is_kernel_vaddr(vaddr)){
         exit(-1);
 	}
-	//ppt 12 page and 28 page
 	if (pagedir_get_page(cur->pagedir, vaddr) == NULL){
 		exit(-1);
 	}
@@ -33,10 +32,6 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f ) 
 {
-
-//	printf("***********[%d]***********\n\n", thread_current () -> tid);
-//	hex_dump((f->esp), (f->esp), 100, true);
-//	hex_dump(0x080480f4, 0x080480f4, 100, true);
   switch(*(uintptr_t*)(f->esp)){
       case SYS_HALT:
           halt();
@@ -49,7 +44,7 @@ syscall_handler (struct intr_frame *f )
           
       case SYS_EXEC:
           _valid_addr(f->esp + 4);
-          f->eax = exec(*(uint32_t*)(f->esp + 4));
+          f->eax = exec(*(uintptr_t*)(f->esp + 4));
           break;
 
       case SYS_WAIT:
@@ -70,6 +65,19 @@ syscall_handler (struct intr_frame *f )
           _valid_addr(f->esp + 12);
           f->eax = write(*(int*)(f->esp + 4), *(uintptr_t*)(f->esp + 8), *(unsigned*)(f->esp + 12));
           break;
+
+      case SYS_FIBO:
+		  _valid_addr(f->esp + 4);
+		  f->eax = fibonacci(*(int*)(f->esp + 4));
+		  break;
+
+	  case SYS_SUM4:
+		  _valid_addr(f->esp + 4);
+		  _valid_addr(f->esp + 8);
+		  _valid_addr(f->esp + 12);
+		  _valid_addr(f->esp + 16);
+		  f->eax = sum_of_four_integers(*(int*)(f->esp + 4), *(int*)(f->esp + 8), *(int*)(f->esp + 12), *(int*)(f->esp + 16));
+		  break;
   }
 }
 
@@ -114,4 +122,24 @@ int write(int fd, const void *buffer, unsigned size){
         return size;
     }
     return -1;
+}
+
+int fibonacci(int n){
+	int n3 = 0, n2 = 1, n1 = 1;
+	int i;
+
+	if(n < 3)
+		return 1;
+
+	for(i = 2; i < n; ++i){
+		n3 = (n2 + n1);
+		n1 = n2;
+		n2 = n3;
+	}
+
+	return n3;
+}
+
+int sum_of_four_integers(int a, int b, int c, int d){
+	return a + b + c + d;
 }

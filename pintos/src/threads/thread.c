@@ -173,8 +173,7 @@ thread_create (const char *name, int priority,
   tid_t tid;
   enum intr_level old_level;
   ASSERT (function != NULL);
-  
-
+ 
   /* Allocate thread. */
   t = palloc_get_page (PAL_ZERO);
   if (t == NULL)
@@ -289,10 +288,6 @@ thread_exit (void)
 
   ASSERT (!intr_context ());
 
-//  tmp = cur->parent;
-//  tmp->exit_status = cur->exit_status;
-//  tmp->dest_elem = cur->child_elem;
-//  tmp->rego = 1;
 #ifdef USERPROG
   process_exit ();
 #endif
@@ -466,10 +461,8 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
- ///// added   
+
   char cpyname[20];
-//  printf("%s to\n",name);
-//
 	int len = strlen(name), i = 0;
 	while(1){
 		if (name[i] == 0 || name[i] == '\t' || name[i] == ' '){
@@ -479,10 +472,6 @@ init_thread (struct thread *t, const char *name, int priority)
 		cpyname[i] = name[i];
 		i++;
 	}
-//
-//  name = strtok_r(name, seps, &save_ptr);
-  
-//  printf("%s %s\n", cpyname, name);
 
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
@@ -491,13 +480,14 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
-//			added
+
 #ifdef USERPROG
   
   list_init(&(t->child));
   list_push_back(&running_thread()->child, &t->child_elem);
   t->parent = running_thread();
-  t->rego = 0;
+  t->waiting = true;
+
 #endif
 }
 

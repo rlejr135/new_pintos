@@ -100,7 +100,7 @@ struct thread
 	struct list child;
 	struct thread *parent;
 	int exit_status;
-	int rego;
+	bool waiting;
 	struct list_elem dest_elem;
 #endif
 

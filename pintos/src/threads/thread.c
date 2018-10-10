@@ -172,8 +172,8 @@ thread_create (const char *name, int priority,
   struct switch_threads_frame *sf;
   tid_t tid;
   enum intr_level old_level;
-
   ASSERT (function != NULL);
+  
 
   /* Allocate thread. */
   t = palloc_get_page (PAL_ZERO);
@@ -183,18 +183,15 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
   old_level = intr_disable ();
-
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
   kf->function = function;
   kf->aux = aux;
-
   /* Stack frame for switch_entry(). */
   ef = alloc_frame (t, sizeof *ef);
   ef->eip = (void (*) (void)) kernel_thread;
@@ -288,8 +285,14 @@ thread_tid (void)
 void
 thread_exit (void) 
 {
+	struct thread *cur = thread_current(), *tmp;
+
   ASSERT (!intr_context ());
 
+//  tmp = cur->parent;
+//  tmp->exit_status = cur->exit_status;
+//  tmp->dest_elem = cur->child_elem;
+//  tmp->rego = 1;
 #ifdef USERPROG
   process_exit ();
 #endif
@@ -299,6 +302,7 @@ thread_exit (void)
      when it calls thread_schedule_tail(). */
   intr_disable ();
   list_remove (&thread_current()->allelem);
+
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -462,17 +466,39 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
-    
-  char *save_ptr;
-  name = strtok_r(name, " \t\0", &save_ptr);
+ ///// added   
+  char cpyname[20];
+//  printf("%s to\n",name);
+//
+	int len = strlen(name), i = 0;
+	while(1){
+		if (name[i] == 0 || name[i] == '\t' || name[i] == ' '){
+			cpyname[i] = 0;
+			break;
+		}
+		cpyname[i] = name[i];
+		i++;
+	}
+//
+//  name = strtok_r(name, seps, &save_ptr);
+  
+//  printf("%s %s\n", cpyname, name);
 
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
-  strlcpy (t->name, name, sizeof t->name);
+  strlcpy (t->name, cpyname, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+//			added
+#ifdef USERPROG
+  
+  list_init(&(t->child));
+  list_push_back(&running_thread()->child, &t->child_elem);
+  t->parent = running_thread();
+  t->rego = 0;
+#endif
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -565,7 +591,6 @@ schedule (void)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
-
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);

@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -31,19 +32,20 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
-  /* Make a copy of FILE_NAME.
+ /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
+//	printf("[%s]\n", file_name);
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
 
+  strlcpy (fn_copy, file_name, PGSIZE);
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+//  printf("hello %d\n\n", tid);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
 
-  printf("\n\ntid:%d\n\n\n",tid);
   return tid;
 }
 
@@ -88,24 +90,30 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-    printf("\nchild_tid:%d\n\n",child_tid);
   struct thread *cur = thread_current(), *t;
   struct list_elem *e;
   int exit_status;
-  printf("\nhelp me\n\n");
-  for(e = list_begin(&(cur->child_elem)); e != list_end(&(cur->child_elem)); e = list_next(e)){
+
+
+//	printf("parent : [%d] parent status : [%d] \n\n child : [%d], status []\n\n", cur->tid, cur->status, child_tid);
+  for(e = list_begin(&(cur->child)); e != list_end(&(cur->child)); e = list_next(e)){
       t = list_entry(e, struct thread, child_elem);
+
       if(child_tid == t->tid){
-          exit_status = t->status;
-          while(t->status == THREAD_BLOCKED)
-              thread_unblock(t);
-          list_remove(e);
+		  // t is child
+		
+		  while(cur->rego == 0){
+			 barrier(); 
+		  }
+		  exit_status = cur->exit_status;
+		  cur->exit_status = 0;
+          list_remove(&(cur->dest_elem));
+			cur->rego =0;
           return exit_status;
       }
   }
-   // while(1)    ;
   return -1;
 }
 
@@ -113,7 +121,7 @@ process_wait (tid_t child_tid UNUSED)
 void
 process_exit (void)
 {
-  struct thread *cur = thread_current ();
+  struct thread *cur = thread_current (), *tmp;
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
@@ -132,12 +140,12 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-
-  printf("\n\nexit\n\n\n");
-  struct list_elem *e = (&(cur->child_elem))->prev;
-  thread_unblock(list_entry(e, struct thread, child_elem));
-
-  thread_block();
+	
+  tmp = cur->parent;
+  tmp->exit_status = cur->exit_status;
+  tmp->dest_elem = cur->child_elem;
+  tmp->rego = 1;
+//	printf("parent : [%d] parent status: [%d] cur parent : [%d]\n\n", tmp->tid, tmp->status, cur->tid);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -252,6 +260,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   for(arg[j++] = strtok_r(file_name, seps, &save_ptr); arg[j - 1] != NULL; arg[j++] = strtok_r(NULL, seps, &save_ptr)) ;
 
   /* Open executable file. */
+
   file = filesys_open (arg[0]);
   if (file == NULL) 
     {
@@ -376,8 +385,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-
-  hex_dump(*esp, *esp, 100, 1);
+//  printf("here!*********\n");
+//  hex_dump(*esp, *esp, 100, 1);
+//  printf("**************************\n\n");
 
  done:
   /* We arrive here whether the load is successful or not. */

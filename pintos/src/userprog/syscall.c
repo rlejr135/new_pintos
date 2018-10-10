@@ -8,13 +8,18 @@
 #include "userprog/process.h"
 
 void _valid_addr(const void *vaddr){
+	struct thread *cur = thread_current();
     if (vaddr == NULL){
         exit(-1);
     }
-
     if (is_kernel_vaddr(vaddr)){
         exit(-1);
-    }
+	}
+	//ppt 12 page and 28 page
+	if (pagedir_get_page(cur->pagedir, vaddr) == NULL){
+		exit(-1);
+	}
+ 
 }
 
 static void syscall_handler (struct intr_frame *);
@@ -26,8 +31,12 @@ syscall_init (void)
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f ) 
 {
+
+//	printf("***********[%d]***********\n\n", thread_current () -> tid);
+//	hex_dump((f->esp), (f->esp), 100, true);
+//	hex_dump(0x080480f4, 0x080480f4, 100, true);
   switch(*(uintptr_t*)(f->esp)){
       case SYS_HALT:
           halt();
@@ -35,30 +44,31 @@ syscall_handler (struct intr_frame *f UNUSED)
 
       case SYS_EXIT:
           _valid_addr(f->esp + 4);
-          exit(*(uintptr_t*)(f->esp + 4));
+          exit(*(int*)(f->esp + 4));
           break;
           
       case SYS_EXEC:
           _valid_addr(f->esp + 4);
-          f->eax = exec(*(uintptr_t*)(f->esp + 4));
+          f->eax = exec(*(uint32_t*)(f->esp + 4));
           break;
 
       case SYS_WAIT:
-          process_wait(thread_current()->tid);
+		  _valid_addr(f->esp + 4);
+          f->eax = wait(*(pid_t*)(f->esp + 4));
           break;
 
       case SYS_READ:
           _valid_addr(f->esp + 4);
           _valid_addr(f->esp + 8);
           _valid_addr(f->esp + 12);
-          f->eax = read(*(uintptr_t*)(f->esp + 4), *(uintptr_t*)(f->esp + 8), *(uintptr_t*)(f->esp + 12));
+          f->eax = read(*(int*)(f->esp + 4), *(uintptr_t*)(f->esp + 8), *(unsigned*)(f->esp + 12));
           break;
 
       case SYS_WRITE:
           _valid_addr(f->esp + 4);
           _valid_addr(f->esp + 8);
           _valid_addr(f->esp + 12);
-          f->eax = write(*(uintptr_t*)(f->esp + 4), *(uintptr_t*)(f->esp + 8), *(uintptr_t*)(f->esp + 12));
+          f->eax = write(*(int*)(f->esp + 4), *(uintptr_t*)(f->esp + 8), *(unsigned*)(f->esp + 12));
           break;
   }
 }
@@ -69,16 +79,16 @@ void halt(void){
 
 void exit(int status){
     printf("%s: exit(%d)\n", thread_name(), status);
+	thread_current()->exit_status = status;
     thread_exit();
 }
 
 pid_t exec(const char *cmd_line){
-    printf("\n*******%s*******\n\n",cmd_line);
     return process_execute(cmd_line);
 }
 
 int wait(pid_t pid){
-    ;
+	return process_wait(pid);
 }
 
 int read(int fd, void *buffer, unsigned size){

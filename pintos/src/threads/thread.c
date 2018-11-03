@@ -286,6 +286,7 @@ thread_exit (void)
 {
 	struct thread *cur = thread_current(), *tmp;
 
+
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
@@ -485,9 +486,14 @@ init_thread (struct thread *t, const char *name, int priority)
   
   list_init(&(t->child));
   list_push_back(&running_thread()->child, &t->child_elem);
+  sema_init(&(t->load_sema),0);
   t->parent = running_thread();
-  t->waiting = true;
+  sema_init(&(t->sema),0);
 
+  sema_init(&(t->zombie_sema), 0);
+  t->waiting = false;
+  t->load_fail_ = false;
+  t->z_waiting = false;
 #endif
 }
 

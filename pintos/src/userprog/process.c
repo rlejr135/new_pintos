@@ -30,6 +30,8 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  struct list_elem *e;
+  struct thread *t, *cur = thread_current();
   tid_t tid;
 
  /* Make a copy of FILE_NAME.
@@ -51,16 +53,24 @@ process_execute (const char *file_name)
 	  cpyname[i] = file_name[i];
 	  i++;
   }
-  
   if (filesys_open(cpyname) == NULL){
 	  return -1;
   }
-
   /* Create a new thread to execute FILE_NAME. */
+
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+
+  sema_down(&thread_current()->load_sema);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
 
+  for(e = list_begin(&(cur->child)); e != list_end(&(cur->child)); e = list_next(e)){
+      t = list_entry(e, struct thread, child_elem);
+	  if (t->load_fail_){
+		return process_wait(t->tid);
+	  }
+
+  }
   return tid;
 }
 
@@ -72,18 +82,20 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-
   success = load (file_name, &if_.eip, &if_.esp);
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+
+  sema_up(&thread_current()->parent->load_sema); 
+  if (!success){ 
+    thread_current()->load_fail_ = true;
+	thread_exit();
+  }
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -109,20 +121,19 @@ process_wait (tid_t child_tid)
   struct thread *cur = thread_current(), *t;
   struct list_elem *e;
   int exit_status;
-
-
   for(e = list_begin(&(cur->child)); e != list_end(&(cur->child)); e = list_next(e)){
       t = list_entry(e, struct thread, child_elem);
 
       if(child_tid == t->tid){
-		
-		  while(cur->waiting){
-			 barrier(); 
+		  cur->waiting = true;	
+		  if (t->z_waiting){
+			sema_up(&t->zombie_sema);
 		  }
+		  sema_down(&(cur->sema));
 		  exit_status = cur->exit_status;
 		  cur->exit_status = 0;
           list_remove(&(cur->dest_elem));
-			cur->waiting = true;
+		  cur->waiting = false;
           return exit_status;
       }
   }
@@ -135,6 +146,18 @@ process_exit (void)
 {
   struct thread *cur = thread_current (), *tmp;
   uint32_t *pd;
+  //when current thread want to die, current thread must not have child thread
+  //if have, exit thread
+
+  if (cur->load_fail_){
+	cur->exit_status = -1;
+  }
+
+  if (cur->parent->waiting == false){
+	  cur->z_waiting = true;
+	  sema_down(&cur->zombie_sema);
+  }
+
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -157,6 +180,8 @@ process_exit (void)
   tmp->exit_status = cur->exit_status;
   tmp->dest_elem = cur->child_elem;
   tmp->waiting = false;
+  sema_up(&(tmp->sema));
+
 }
 
 /* Sets up the CPU for running user code in the current
@@ -268,7 +293,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   int j = 0;
-  for(arg[j++] = strtok_r(file_name, seps, &save_ptr); arg[j - 1] != NULL; arg[j++] = strtok_r(NULL, seps, &save_ptr)) ;
+  for(arg[j++] = strtok_r(file_name, seps, &save_ptr); arg[j - 1] != NULL; arg[j++] = strtok_r(NULL, seps, &save_ptr))
 
   /* Open executable file. */
   file = filesys_open (arg[0]);
@@ -395,13 +420,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-//  printf("here!*********\n");
-//  hex_dump(*esp, *esp, 100, 1);
-//  printf("**************************\n\n");
 
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  
   return success;
 }
 

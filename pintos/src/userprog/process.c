@@ -58,7 +58,7 @@ process_execute (const char *file_name)
   }
   /* Create a new thread to execute FILE_NAME. */
 
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (cpyname, PRI_DEFAULT, start_process, fn_copy);
 
   sema_down(&thread_current()->load_sema);
   if (tid == TID_ERROR)

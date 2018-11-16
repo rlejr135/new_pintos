@@ -6,6 +6,11 @@
 #include <stdint.h>
 #include "synch.h"
 
+#ifndef USERPROG
+/* Project Threads */
+extern bool thread_prior_aging;
+#endif
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -113,7 +118,11 @@ struct thread
 	bool z_waiting;
 #endif
 
-
+	/* project threads */
+	int64_t waketime;
+	int org_priority;
+	bool is_donated;
+ 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -154,4 +163,5 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+int thread_compare_priority(struct list_elem *, struct list_elem *, void *);
 #endif /* threads/thread.h */

@@ -101,7 +101,7 @@ timer_sleep (int64_t ticks)
   thread_current()->waketime = start + ticks;
   if(wake_first > start + ticks)
 	  wake_first = start + ticks;
-  list_push_back(&sleep_list, &thread_current()->elem);
+  list_push_back(&sleep_list, &thread_current()->sleep_elem);
   thread_block();
   intr_set_level(old_level);
 }
@@ -184,8 +184,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
   struct list_elem *e;
   struct thread *t;
   if(ticks >= wake_first){
-	  for(e = list_begin(&(sleep_list)); e != list_end(&(sleep_list));){
-		  t = list_entry(e, struct thread, elem);
+	  for(e = list_begin(&(sleep_list)); e != list_end(&(sleep_list)); ){
+		  t = list_entry(e, struct thread, sleep_elem);
 		  if(t->waketime <= wake_first){
 			  e = list_remove(e);
 			  thread_unblock(t);
@@ -195,12 +195,32 @@ timer_interrupt (struct intr_frame *args UNUSED)
 	  }
 	  wake_first = INT64_MAX;
 	  for(e = list_begin(&(sleep_list)); e != list_end(&(sleep_list)); e = list_next(e)){
-		  t = list_entry(e, struct thread, elem);
+		  t = list_entry(e, struct thread, sleep_elem);
 		  if(wake_first > t->waketime)
 			  wake_first = t->waketime;
 	  }
   }
+
   thread_tick ();
+  
+#ifndef USERPROG
+  if((thread_prior_aging == true)||(thread_mlfqs == true)){
+	// recent_cpu incremented by 1 for the running thread
+	if (strcmp(thread_current ( )->name, "idle")){
+		thread_current()->recent_cpu = add_fixed_and_int(thread_current()->recent_cpu, 1);
+	}
+	// recalculate recent_cpu and load_avg every second
+	if(ticks%TIMER_FREQ == 0){
+		recalculate_load_avg_and_recent_cpu();
+	}
+
+	// recalculate priority every fourth clock tick
+	if(ticks%4 == 0){
+		recalculate_priority();
+	}
+  }
+#endif
+  
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

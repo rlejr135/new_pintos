@@ -5,11 +5,14 @@
 #include <list.h>
 #include <stdint.h>
 #include "synch.h"
+#include "fixed_point.h"
 
 #ifndef USERPROG
 /* Project Threads */
 extern bool thread_prior_aging;
 #endif
+
+int load_avg;
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -120,8 +123,9 @@ struct thread
 
 	/* project threads */
 	int64_t waketime;
-	int org_priority;
-	bool is_donated;
+	int nice;
+	int recent_cpu;
+	struct list_elem sleep_elem;
  
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -164,4 +168,7 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 int thread_compare_priority(struct list_elem *, struct list_elem *, void *);
+
+void recalculate_load_avg_and_recent_cpu(void);
+void recalculate_priority(void);
 #endif /* threads/thread.h */
